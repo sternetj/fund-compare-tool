@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fund Comparison Tool</title>
+    <style>
+      body {
+        display: block;
+        width: calc(100vw - 4rem);
+        font-family: sans-serif;
+        padding: 2rem;
+      }
+      label {
+        display: inline-block;
+      }
+      input {
+        margin: 0.5rem;
+      }
+      table,
+      th,
+      td {
+        border: 1px solid black;
+        border-collapse: collapse;
+        padding: 0.5rem;
+      }
+      #resultsTables {
+        min-width: 1300px;
+      }
+      tr {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
+      }
+      canvas {
+        width: 100vw;
+      }
+      #removeFund {
+        display: none;
+      }
+      #instructions {
+        text-align: center;
+        margin-bottom: 1rem;
+        font-size: 0.7rem;
+        font-style: italic;
+        color: #666;
+      }
+      #modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        background-color: #fefefe;
+        padding: 1rem;
+        border: 1px solid black;
+        border-radius: 0.5rem;
+        box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+      }
+      .title {
+        font-weight: bold;
+      }
+      .stat {
+        margin-bottom: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>ETF/Mutual Fund Comparison</h1>
+
+    <div>
+      <label
+        >Name: <input id="name" type="text" oninput="updateAddFundButton()"
+      /></label>
+      <label
+        >Initial Investment ($): <input id="initial" type="number" step="0.01"
+      /></label>
+      <label
+        >Rate of Return (%): <input id="return" type="number" step="0.01"
+      /></label>
+      <label
+        >Expense Ratio (%): <input id="expense" type="number" step="0.01"
+      /></label>
+      <label
+        >Sales Load (%): <input id="sales" type="number" step="0.01"
+      /></label>
+      <label
+        >Contribution ($/year):
+        <input id="contribution" type="number" step="0.01"
+      /></label>
+      <button id="addFund" onclick="addFund()">Add Fund</button>
+      <button id="removeFund" onclick="removeFund()">Remove Fund</button>
+      <br />
+      <label
+        >Years to Project:
+        <input id="years" type="number" value="30" min="1" oninput="reRender()"
+      /></label>
+    </div>
+
+    <canvas id="chart" width="800" height="400"></canvas>
+    <div id="instructions">Click on a fund to edit above</div>
+    <div id="resultsTables"></div>
+    <div id="modal" onmouseleave="hideModal()"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+      let funds = JSON.parse(localStorage.getItem("funds") || "[]");
+      const colors = [
+        "green",
+        "blue",
+        "red",
+        "purple",
+        "orange",
+        "cyan",
+        "magenta",
+      ];
+
+      function hideModal() {
+        const modal = document.getElementById("modal");
+        modal.style.display = "none";
+      }
+
+      function asDollars(value) {
+        return `$${value.toLocaleString().split(".")[0]}`;
+      }
+
+      function asPercent(value) {
+        return `${Math.round(value * 10000) / 100}%`;
+      }
+
+      function updateAddFundButton() {
+        const name = document.getElementById("name").value;
+        if (funds.some((f) => f.name === name)) {
+          document.getElementById("addFund").innerHTML = "Update Fund";
+          document.getElementById("removeFund").style.display = "block";
+        } else {
+          document.getElementById("addFund").innerHTML = "Add Fund";
+          document.getElementById("removeFund").style.display = "none";
+        }
+      }
+
+      function removeFund() {
+        const name = document.getElementById("name").value;
+        funds = funds.filter((f) => f.name !== name);
+        localStorage.setItem("funds", JSON.stringify(funds));
+        reRender();
+      }
+
+      function addFund() {
+        const name =
+          document.getElementById("name").value || `Fund ${funds.length + 1}`;
+        const initial = parseFloat(document.getElementById("initial").value);
+        const rate = parseFloat(document.getElementById("return").value) / 100;
+        const expense =
+          parseFloat(document.getElementById("expense").value) / 100;
+        const salesPercent =
+          parseFloat(document.getElementById("sales").value) / 100;
+        const contrib = parseFloat(
+          document.getElementById("contribution").value,
+        );
+        const years = parseInt(document.getElementById("years").value);
+
+        if ([rate, expense, salesPercent, contrib, initial].some(isNaN)) {
+          alert("Please enter valid numbers for all fields.");
+          return;
+        }
+
+        const fund = {
+          name,
+          initial,
+          rate,
+          expense,
+          salesPercent,
+          contrib,
+          years,
+        };
+        fund.data = calculateProjection(fund);
+        const existingFundIndex = funds.findIndex((f) => f.name === fund.name);
+        if (existingFundIndex !== -1) {
+          funds[existingFundIndex] = fund;
+        } else {
+          funds.push(fund);
+        }
+
+        localStorage.setItem("funds", JSON.stringify(funds));
+
+        reRender();
+      }
+
+      function calculateProjection(fund) {
+        const values = [];
+        let total = fund.initial * (1 - fund.salesPercent);
+        for (let i = 0; i <= fund.years; i++) {
+          if (i > 0) total += fund.contrib * (1 - fund.salesPercent);
+          total *= 1 + (fund.rate - fund.expense);
+          values.push(total);
+        }
+        return values;
+      }
+
+      let chart;
+      function updateChart() {
+        const labels = Array.from(
+          { length: parseInt(document.getElementById("years").value) + 1 },
+          (_, i) => `${i}`,
+        );
+        const datasets = funds.map((f, i) => ({
+          label: f.name,
+          data: [f.initial, ...f.data],
+          borderColor: colors[i % colors.length],
+          fill: false,
+        }));
+
+        if (chart) chart.destroy();
+        chart = new Chart(document.getElementById("chart").getContext("2d"), {
+          type: "line",
+          data: {
+            labels,
+            datasets,
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              tooltip: {
+                callbacks: {
+                  legend: (context) => {
+                    const fund = funds.find((f) => f.name === context.label);
+                    return `"TEST"`;
+                  },
+                },
+              },
+              legend: {
+                position: "bottom",
+                onClick: (e, legendItem) => {
+                  const fund = funds.find((f) => f.name === legendItem.text);
+                  if (fund) {
+                    document.getElementById("name").value = fund.name;
+                    document.getElementById("initial").value = fund.initial;
+                    document.getElementById("return").value =
+                      Math.round(fund.rate * 10000) / 100;
+                    document.getElementById("expense").value =
+                      Math.round(fund.expense * 10000) / 100;
+                    document.getElementById("sales").value =
+                      Math.round(fund.salesPercent * 10000) / 100;
+                    document.getElementById("contribution").value =
+                      fund.contrib;
+                    document.getElementById("years").value = fund.years;
+                    updateAddFundButton();
+                  }
+                },
+                onLeave: hideModal,
+                onHover: (event, legendItem) => {
+                  const fund = funds.find((f) => f.name === legendItem.text);
+                  if (!fund) return;
+                  const modal = document.getElementById("modal");
+                  modal.style.display = "block";
+                  modal.style.top = `${event.native.offsetY + 175}px`;
+                  modal.style.left = `${event.native.offsetX}px`;
+                  modal.innerHTML = `
+                    <div>
+                      <div class="title">${fund.name}</div>
+                      <div class="stat">Initial Investment: ${asDollars(
+                        fund.initial,
+                      )}</div>
+                      <div class="stat">Rate of Return: ${asPercent(
+                        fund.rate,
+                      )}</div>
+                      <div class="stat">Expense Ratio: ${asPercent(
+                        fund.expense,
+                      )}</div>
+                      <div class="stat">Sales Load: ${asPercent(
+                        fund.salesPercent,
+                      )}</div>
+                      <div class="stat">Contribution: ${asDollars(
+                        fund.contrib,
+                      )}/year</div>
+                    </div>
+                  `;
+                  console.log(event, legendItem);
+                },
+              },
+            },
+            scales: {
+              y: {
+                title: { display: true, text: "Value ($)" },
+              },
+              x: {
+                title: { display: true, text: "Year" },
+              },
+            },
+          },
+        });
+      }
+
+      function updateTable() {
+        const years = parseInt(document.getElementById("years").value);
+        const chunks = Array.from({ length: years / 10 }, (_, i) => i * 10);
+        let tables = [];
+        for (let chunk = 0; chunk < years / 10; chunk++) {
+          let html = "<tr><th>Fund</th>";
+
+          const maxYear = Math.min(chunk * 10 + 9, years);
+
+          // Add year headers
+          for (let year = chunk * 10; year <= maxYear; year++) {
+            html += `<th>Year ${year + 1}</th>`;
+          }
+          html += "</tr>";
+
+          // Add fund rows
+          funds.forEach((f) => {
+            html += `<tr><td>${f.name}</td>`;
+            for (let year = chunk * 10; year <= maxYear; year++) {
+              html += `<td>${asDollars(f.data[year])}</td>`;
+            }
+            html += "</tr>";
+          });
+
+          tables.push(`<table>${html}</table>`);
+        }
+
+        document.getElementById("resultsTables").innerHTML = tables
+          .reverse()
+          .join("<br>");
+      }
+
+      function reRender() {
+        updateChart();
+        updateTable();
+      }
+
+      if (funds.length > 0) {
+        reRender();
+      }
+    </script>
+  </body>
+</html>
