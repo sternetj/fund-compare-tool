@@ -258,8 +258,8 @@
                   if (!fund) return;
                   const modal = document.getElementById("modal");
                   modal.style.display = "block";
-                  modal.style.top = `${event.native.offsetY + 175}px`;
-                  modal.style.left = `${event.native.offsetX}px`;
+                  modal.style.top = `${event.native.pageY + 5}px`;
+                  modal.style.left = `${event.native.pageX + 5}px`;
                   modal.innerHTML = `
                     <div>
                       <div class="title">${fund.name}</div>
