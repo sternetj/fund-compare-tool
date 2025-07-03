@@ -1,4 +1,4 @@
-# Fund Compare Tool http://sternetj.github.io/fund-compare-tool
+# Fund Compare Tool [Try the App](http://sternetj.github.io/fund-compare-tool/index.html)
 
 A tool for comparing ETF and mutual fund investment scenarios with interactive charts and detailed projections.
 
