@@ -225,14 +225,6 @@
           options: {
             responsive: true,
             plugins: {
-              tooltip: {
-                callbacks: {
-                  legend: (context) => {
-                    const fund = funds.find((f) => f.name === context.label);
-                    return `"TEST"`;
-                  },
-                },
-              },
               legend: {
                 position: "bottom",
                 onClick: (e, legendItem) => {
@@ -258,7 +250,7 @@
                   if (!fund) return;
                   const modal = document.getElementById("modal");
                   modal.style.display = "block";
-                  modal.style.top = `${event.native.pageY + 5}px`;
+                  modal.style.top = `${event.native.pageY + 20}px`;
                   modal.style.left = `${event.native.pageX + 5}px`;
                   modal.innerHTML = `
                     <div>
